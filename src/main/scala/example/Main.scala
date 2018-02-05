@@ -1,12 +1,14 @@
 package example
 
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ScheduledThreadPoolExecutor, TimeUnit}
 
-import monix.execution.{ExecutionModel, Scheduler}
+import monix.execution.{Cancelable, ExecutionModel, Scheduler}
 
 import scala.concurrent.duration._
 import monix.execution.Scheduler.{global => scheduler}
 import monix.execution.schedulers.TestScheduler
+import monix.execution.schedulers.ReferenceScheduler
+import monix.reactive.Observable
 
 object Main extends App {
 
@@ -33,7 +35,9 @@ object Main extends App {
 //    println("Hello, world!")
 //  }
 
-  val c = scheduler.scheduleAtFixedRate(
+//  write my own scheduler based on ReferenceSchduler con un Cancelable basado on top of OrderedCancelable
+
+  val c: Cancelable = scheduler.scheduleAtFixedRate(
     3, 5, TimeUnit.SECONDS,
     new Runnable {
       def run(): Unit = {
