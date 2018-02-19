@@ -1,7 +1,7 @@
 package example
 
 
-object TaskApp extends App {
+object TaskApp {
   import java.util.{Timer, TimerTask}
 
 

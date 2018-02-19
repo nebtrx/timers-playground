@@ -1,7 +1,12 @@
 package example
 
-import monix.execution.Cancelable
+import java.util.concurrent.{Callable, ScheduledExecutorService, ScheduledFuture, TimeUnit}
+
+import monix.execution.{Cancelable, Scheduler}
 import monix.execution.cancelables.{AssignableCancelable, OrderedCancelable}
+import monix.execution.schedulers.ShiftedRunnable
+
+import scala.concurrent.Await
 
 
 private case class Stats(var totalElapsedTime: Long, var totalCycleCount: Long)
@@ -17,41 +22,30 @@ trait IStatsAwareCancelable extends Cancelable {
   def totalCycleCount: Long
 }
 
-final class StatsAwareCancelable private(initial: Cancelable)
+final class StatsAwareCancelable private(action: Cancelable)
   extends AssignableCancelable.Multi with IStatsAwareCancelable {
+
   // cicles left
+  private var _totalElapsedTime: Long = 0
 
-  lazy val currentKey: Int = hashCode()
+  // May swithc later to something called _totalScheduledCycleCount
+  private var _totalCycleCount: Long = 0
 
-  private var orderedCancelable = OrderedCancelable(initial)
+  private var _orderedCancelable = OrderedCancelable(action)
 
-  private var stats = Map[Int, Stats](currentKey -> Stats.default)
+  override def isCanceled: Boolean = _orderedCancelable.isCanceled
 
-  override def isCanceled: Boolean = orderedCancelable.isCanceled
-
-  override def cancel(): Unit = orderedCancelable.cancel()
+  override def cancel(): Unit = _orderedCancelable.cancel()
 
   def `:=`(value: Cancelable): this.type = {
-    val underlying = value.asInstanceOf[StatsAwareCancelable].orderedCancelable
-    // TODO: review this, I dont think is going to work as expected.
-    //       I must fully understand how := works
-    orderedCancelable := underlying
+    _orderedCancelable := value
+    _totalCycleCount += 1
     this
   }
 
-  def totalElapsedTime: Long = currentStats.totalElapsedTime
+  def totalElapsedTime: Long = _totalElapsedTime
 
-  def totalCycleCount: Long = currentStats.totalCycleCount
-
-  private def totalElapsedTime_=(value: Long): Unit = {
-    currentStats.totalElapsedTime = value
-  }
-
-  private def totalCycleCount_=(value: Long): Unit = {
-    currentStats.totalCycleCount = value
-  }
-
-  protected def currentStats: Stats = stats.getOrElse(currentKey, Stats.default)
+  def totalCycleCount: Long = _totalCycleCount
 }
 
 object StatsAwareCancelable {
@@ -74,6 +68,15 @@ object StatsAwareCancelable {
   def apply(callback: () => Unit, totalElapsedTime: Long): StatsAwareCancelable = {
     var cancelable = StatsAwareCancelable(Cancelable(callback))
     cancelable._totalElapsedTime = totalElapsedTime
+    cancelable
+  }
+
+  /** Builder for [[StatsAwareCancelable]]. */
+  def apply(initialDelay: Long, unit: TimeUnit, r: Runnable, s:Scheduler, ss: ScheduledExecutorService): StatsAwareCancelable = {
+    var cancelable = StatsAwareCancelable()
+    val deferred = ElapsedTimeAwareRunnable(new ShiftedRunnable(r, s), (et) => cancelable._totalElapsedTime = et)
+    val task = ss.schedule(deferred, initialDelay, unit)
+    cancelable._orderedCancelable = OrderedCancelable(Cancelable(() => task.cancel(true)))
     cancelable
   }
 }

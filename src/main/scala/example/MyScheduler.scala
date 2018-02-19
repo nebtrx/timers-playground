@@ -1,6 +1,6 @@
 package example
 
-import java.util.concurrent.{Executor, ScheduledExecutorService, TimeUnit}
+import java.util.concurrent._
 
 import monix.execution.atomic.{AtomicAny, PaddingStrategy}
 import monix.execution.cancelables.{AssignableCancelable, OrderedCancelable}
@@ -31,54 +31,62 @@ final class MyScheduler private(
                                      val executionModel: ExecutionModel)
   extends ReferenceScheduler with BatchingScheduler with TScheduler {
 
+  private val underlyingScheduler = AsyncScheduler(scheduler, ec, r, executionModel)
+
+
   protected def executeAsync(r: Runnable): Unit =
     ec.execute(r)
 
   override def scheduleOnce(initialDelay: Long, unit: TimeUnit, r: Runnable): IStatsAwareCancelable = {
-    var startedAtMillis: Long = 0
-    var finishedAtMillis: Long = 0
-    
     if (initialDelay <= 0) {
-      startedAtMillis = currentTimeMillis()
+      val startedAtMillis = currentTimeMillis()
       ec.execute(r)
-      finishedAtMillis = currentTimeMillis()
+      val finishedAtMillis = currentTimeMillis()
+//      Cancelable.empty
       StatsAwareCancelable(finishedAtMillis - startedAtMillis)
     } else {
-      val self = this
-      
-      // val deferred = new ShiftedRunnable(r, this)
-      // equivalent to ShiftedRunnable
-      val deferred = new Runnable {
-        override def run() = {
-          startedAtMillis = currentTimeMillis()
-          r match {
-            case ref: TrampolinedRunnable =>
-              // Cannot run directly, otherwise we risk a trampolined
-              // execution on the current thread and call stack and that
-              // isn't what we want
-              self.execute(new StartAsyncBatchRunnable(ref, self))
-            case _ =>
-              self.execute(r)
-          }
-          finishedAtMillis = currentTimeMillis()
-        }
-      }
-      val task = scheduler.schedule(deferred, initialDelay, unit)
-      StatsAwareCancelable(() => task.cancel(true), finishedAtMillis - startedAtMillis)
+      StatsAwareCancelable(initialDelay, unit, r, this, scheduler)
     }
   }
 
+//  override def scheduleOnce(initialDelay: Long, unit: TimeUnit, r: Runnable): IStatsAwareCancelable = {
+//    if (initialDelay <= 0) {
+//      val startedAtMillis = currentTimeMillis()
+//      ec.execute(r)
+//      val finishedAtMillis = currentTimeMillis()
+//      StatsAwareCancelable(finishedAtMillis - startedAtMillis)
+//    } else {
+//      val statsAwareScheduler = this
+//
+//      // val deferred = new ShiftedRunnable(r, this)
+//      // equivalent to ShiftedRunnable
+//      val deferred = new Runnable {
+//        override def run() = {
+//          r match {
+//            case ref: TrampolinedRunnable =>
+//              // Cannot run directly, otherwise we risk a trampolined
+//              // execution on the current thread and call stack and that
+//              // isn't what we want
+//              statsAwareScheduler.execute(new StartAsyncBatchRunnable(ref, statsAwareScheduler))
+//            case _ =>
+//              statsAwareScheduler.execute(r)
+//          }
+//        }
+//      }
+//      val task: ScheduledFuture[_] = scheduler.schedule(deferred, initialDelay, unit)
+//      // TODO: deferred the calculation of this time
+//      StatsAwareCancelable(() => task.cancel(true), finishedAtMillis - startedAtMillis)
+//    }
+//  }
+
   override def scheduleWithFixedDelay(initialDelay: Long, delay: Long, unit: TimeUnit, r: Runnable): IStatsAwareCancelable = {
     val sub = StatsAwareCancelable()
-    var startedAtMillis:Long = 0
-    var finishedAtMillis: Long = 0
 
     def loop(initialDelay: Long, delay: Long): Unit = {
       if (!sub.isCanceled)
         sub := scheduleOnce(initialDelay, unit, () => {
-          startedAtMillis = currentTimeMillis()
-          r.run()
-          finishedAtMillis = currentTimeMillis()
+          val etr = ElapsedTimeAwareRunnable(r)
+          etr.run()
           loop(delay, delay)
         })
     }
@@ -88,25 +96,25 @@ final class MyScheduler private(
   }
 
   override def scheduleAtFixedRate(initialDelay: Long, period: Long, unit: TimeUnit, r: Runnable): IStatsAwareCancelable = {
-    val sub = OrderedCancelable()
+    val sub = StatsAwareCancelable()
 
     def loop(initialDelayMs: Long, periodMs: Long): Unit =
       if (!sub.isCanceled) {
-        sub := scheduleOnce(initialDelayMs, TimeUnit.MILLISECONDS, new Runnable {
-          def run(): Unit = {
-            // Measuring the duration of the task
-            val startedAtMillis = currentTimeMillis()
-            r.run()
-
-            val delay = {
-              val durationMillis = currentTimeMillis() - startedAtMillis
-              val d = periodMs - durationMillis
-              if (d >= 0) d else 0
-            }
-
-            // Recursive call
-            loop(delay, periodMs)
+        sub := scheduleOnce(initialDelayMs, TimeUnit.MILLISECONDS, () => {
+          // Measuring the duration of the task
+          //            val startedAtMillis = currentTimeMillis()
+          //            r.run()
+          val etr = ElapsedTimeAwareRunnable(r)
+          etr.run()
+          val delay = {
+            //              val durationMillis = currentTimeMillis() - startedAtMillis
+            //              val d = periodMs - durationMillis
+            val diff = periodMs - etr.elapsedTimeInMilliseconds
+            if (diff >= 0) diff else 0
           }
+
+          // Recursive call
+          loop(delay, periodMs)
         })
       }
 
