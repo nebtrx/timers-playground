@@ -39,9 +39,9 @@ final class MyScheduler private(
 
   override def scheduleOnce(initialDelay: Long, unit: TimeUnit, r: Runnable): IStatsAwareCancelable = {
     if (initialDelay <= 0) {
-      val startedAtMillis = currentTimeMillis()
+      val startedAtMillis = System.currentTimeMillis()
       ec.execute(r)
-      val finishedAtMillis = currentTimeMillis()
+      val finishedAtMillis = System.currentTimeMillis()
 //      Cancelable.empty
       StatsAwareCancelable(finishedAtMillis - startedAtMillis)
     } else {
@@ -51,9 +51,9 @@ final class MyScheduler private(
 
 //  override def scheduleOnce(initialDelay: Long, unit: TimeUnit, r: Runnable): IStatsAwareCancelable = {
 //    if (initialDelay <= 0) {
-//      val startedAtMillis = currentTimeMillis()
+//      val startedAtMillis = System.currentTimeMillis()
 //      ec.execute(r)
-//      val finishedAtMillis = currentTimeMillis()
+//      val finishedAtMillis = System.currentTimeMillis()
 //      StatsAwareCancelable(finishedAtMillis - startedAtMillis)
 //    } else {
 //      val statsAwareScheduler = this
@@ -102,12 +102,12 @@ final class MyScheduler private(
       if (!sub.isCanceled) {
         sub := scheduleOnce(initialDelayMs, TimeUnit.MILLISECONDS, () => {
           // Measuring the duration of the task
-          //            val startedAtMillis = currentTimeMillis()
+          //            val startedAtMillis = System.currentTimeMillis()
           //            r.run()
           val etr = ElapsedTimeAwareRunnable(r)
           etr.run()
           val delay = {
-            //              val durationMillis = currentTimeMillis() - startedAtMillis
+            //              val durationMillis = System.currentTimeMillis() - startedAtMillis
             //              val d = periodMs - durationMillis
             val diff = periodMs - etr.elapsedTimeInMilliseconds
             if (diff >= 0) diff else 0
@@ -132,7 +132,7 @@ final class MyScheduler private(
     new MyScheduler(scheduler, ec, r, em)
 
   private def calcElapsedExecutionTime(startedTimeInMillis : Long) = {
-    currentTimeMillis() - startedTimeInMillis
+    System.currentTimeMillis() - startedTimeInMillis
   }
 }
 
