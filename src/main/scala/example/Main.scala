@@ -3,6 +3,7 @@ package example
 import java.lang.Thread.UncaughtExceptionHandler
 import java.util.concurrent.{TimeUnit, _}
 
+import example.hyt.MonixMain.{HyperTimer, fn}
 import monix.execution.{Cancelable, ExecutionModel, Scheduler, UncaughtExceptionReporter}
 
 import scala.concurrent.duration._
@@ -85,6 +86,16 @@ object Main extends App {
 
   readLine()
   println(s"########## ${c.totalElapsedTime}")
+
+
+  class MyTime(var hoff: String, private val fff: Int) {
+    val bla = 232323
+    private val gggg = 45545454
+  }
+
+
+
+
 
 
 

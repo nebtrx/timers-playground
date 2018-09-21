@@ -31,5 +31,7 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+*.idea/
+*target/
 
 # End of https://www.gitignore.io/api/macOS,
