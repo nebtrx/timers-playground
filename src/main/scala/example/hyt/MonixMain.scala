@@ -41,6 +41,14 @@ object MonixMain extends App {
       c
     }
 
+    def repeat(iterations: Long): Task[Unit] = {
+      for {
+        s <- stateMVar.take
+        newS = s.copy(cyclesLeft = s.cyclesLeft.map(_ + iterations))
+        _ <- stateMVar.put(newS)
+      } yield ()
+    }
+
     // TODO Check several handlers paralelization
     private def tickHandler:Task[StoppingCondition] = {
       for {
@@ -98,8 +106,6 @@ object MonixMain extends App {
         c = h.start()
       } yield c
     }
-
-
   }
 
   // TODO: Move
@@ -130,11 +136,14 @@ object MonixMain extends App {
   val fn = (s: State) => Task{println(s"DEBUGGER $s")}
 
   val computation: Task[Unit] = for {
-    ht <-  HyperTimer(100.milliseconds, fn)
+    ht <-  HyperTimer(1000.milliseconds, fn)
     f = ht.start()
     _ <- Task { StdIn.readLine()}
-    _ = println("STPOOINGGGGG IN 5")
+    _ = println("STPOOINGGGGG --- IN 5")
     _ <- ht.stopIn(5)
+//    _ <- Task { StdIn.readLine()}
+    _ = println("EXTENDING 10 more times")
+    _ <- ht.repeat(10)
     _ <- Task { StdIn.readLine()}
     _ = println("CANCELLLING")
     _ = f.cancel()
